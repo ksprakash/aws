@@ -1,0 +1,44 @@
+#!/bin/bash -x
+: '
+---- installation of systems manager ---
+'
+# installation of systems manager
+
+sudo yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm && sudo systemctl enable amazon-ssm-agent && \
+sudo  sudo systemctl restart amazon-ssm-agent
+
+
+#!/bin/bash -x
+
+sudo yum install perl-Switch perl-DateTime perl-Sys-Syslog perl-LWP-Protocol-https perl-Digest-SHA --enablerepo="rhui-REGION-rhel-server-optional" -y  && \
+sudo yum install zip unzip && \
+cd /tmp  && curl https://aws-cloudwatch.s3.amazonaws.com/downloads/CloudWatchMonitoringScripts-1.2.2.zip -O &&  \
+sudo unzip CloudWatchMonitoringScripts-1.2.2.zip && \
+sudo rm CloudWatchMonitoringScripts-1.2.2.zip && \
+cd /tmp/aws-scripts-mon
+sudo su
+: '
+cat <<EOF >> /etc/crontab
+ */5 * * * *  root /tmp/aws-scripts-mon/mon-put-instance-data.pl --mem-used-incl-cache-buff --mem-util --disk-space-util --disk-path=/ --from-cron
+ */5 * * * * root /tmp/aws-scripts-mon/mon-put-instance-data.pl --disk-space-util --disk-path=/data --from-cron
+EOF
+'
+sudo vi /etc/crontab >> */5 * * * *  root /tmp/aws-scripts-mon/mon-put-instance-data.pl --mem-used-incl-cache-buff --mem-util --disk-space-util --disk-path=/ --from-cron
+sudo vi /etc/crontab >> */5 * * * *  root /tmp/aws-scripts-mon/mon-put-instance-data.pl --disk-space-util --disk-path=/data --from-cron
+
+
+--Working Copy
+
+#!/bin/bash -x
+
+yum install perl-Switch perl-DateTime perl-Sys-Syslog perl-LWP-Protocol-https perl-Digest-SHA --enablerepo="rhui-REGION-rhel-server-optional" -y  && \
+yum install zip unzip && \
+cd /tmp  && curl https://aws-cloudwatch.s3.amazonaws.com/downloads/CloudWatchMonitoringScripts-1.2.2.zip -O &&  \
+unzip CloudWatchMonitoringScripts-1.2.2.zip && \
+rm CloudWatchMonitoringScripts-1.2.2.zip && \
+cd /tmp/aws-scripts-mon
+echo "*/5 * * * *  root /tmp/aws-scripts-mon/mon-put-instance-data.pl --mem-used-incl-cache-buff --mem-util --disk-space-util --disk-path=/ --from-cron" >> /etc/crontab
+echo "*/5 * * * *  root /tmp/aws-scripts-mon/mon-put-instance-data.pl --disk-space-util --disk-path=/data --from-cron" >> /etc/crontab
+
+
+
