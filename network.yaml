@@ -1,0 +1,212 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description:  This template deploys a VPC, with a pair of public subnets spread
+  across two Availability Zones. It deploys an internet gateway, with a default
+  route on the public subnets. 
+  and routes for them in the private subnets.The base template I used in AWS documentation 
+  #https://console.aws.amazon.com/vpc/home#wizardFullpagePublicAndPrivate
+
+Parameters:
+  
+ 
+  CompanyName:
+    Description: An Company name that is prefixed to resource names after environment Ex, prod-aw-*  
+    Type: String
+
+  VpcCidr:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.0.0.0/16
+    AllowedPattern:  (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: "must be a valid IP CIDR range of the form x.x.x.x/x."
+
+  PublicSubnetCidr0:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.0.0.0/24
+    AllowedPattern:  (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+ 
+  PublicSubnetCidr1:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.1.0/24
+    AllowedPattern:  (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: "must be a valid IP CIDR range of the form x.x.x.x/x."
+    
+  PublicSubnetCidr2:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.2.0/24
+    AllowedPattern:  (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: "must be a valid IP CIDR range of the form x.x.x.x/x."
+  
+  PublicSubnetCidr3:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.3.0/24
+    AllowedPattern:  (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: "must be a valid IP CIDR range of the form x.x.x.x/x."
+  
+
+Resources:  
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref  VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: Name
+        Value:  !Sub ${CompanyName}-vpc
+  
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value:  !Join [ "-", [!Ref CompanyName,igw]] 
+ 
+ 
+  VpcGatewayAttachment:
+     Type: AWS::EC2::VPCGatewayAttachment
+     Properties: 
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+
+  PublicSubnet0:  
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: !Select 
+                - 0 
+                - Fn::GetAZs: !Ref "AWS::Region"
+
+      CidrBlock: !Ref PublicSubnetCidr0
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name
+          Value: !Sub ${CompanyName}-publicsubnetAZ0
+      VpcId: !Ref Vpc
+
+  PublicSubnet1:  
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: !Select 
+                  - 1 
+                  - Fn::GetAZs: !Ref "AWS::Region" 
+      CidrBlock: !Ref PublicSubnetCidr1
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name
+          Value: !Sub ${CompanyName}-publicsubnetAZ1
+      VpcId: !Ref Vpc
+  PublicSubnet2:  
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: !Select 
+                  - 2 
+                  - Fn::GetAZs: !Ref "AWS::Region" 
+      CidrBlock: !Ref PublicSubnetCidr2
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name
+          Value: !Sub ${CompanyName}-publicsubnetAZ2
+      VpcId: !Ref Vpc
+  PublicSubnet3:  
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: !Select 
+                  - 1 
+                  - Fn::GetAZs: !Ref "AWS::Region" 
+      CidrBlock: !Ref PublicSubnetCidr3
+      MapPublicIpOnLaunch: true
+      Tags: 
+        - Key: Name
+          Value: !Sub ${CompanyName}-publicsubnetAZ3
+      VpcId: !Ref Vpc  
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+       VpcId: !Ref Vpc
+       Tags: 
+          - Key: Name
+            Value: !Sub ${CompanyName}-publicroutetable
+   
+  
+  PublicRoute:    
+    Type: AWS::EC2::Route
+    DependsOn: InternetGateway
+    Properties:
+       RouteTableId: !Ref PublicRouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+              !Ref InternetGateway 
+  
+
+  PublicSubnetRouteTableAssociation0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet0
+      RouteTableId:
+        Ref: PublicRouteTable
+  
+  PublicSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet1
+      RouteTableId:
+        Ref: PublicRouteTable
+   
+  PublicSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet2
+      RouteTableId:
+        Ref: PublicRouteTable 
+  PublicSubnetRouteTableAssociation3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet3
+      RouteTableId:
+        Ref: PublicRouteTable 
+Outputs:
+  StackVPC:
+    Description: Retrieving the vpc if for exporting to other stacks
+    Value: !Ref Vpc
+    Export:
+       Name: !Sub ${AWS::StackName}-vpc
+
+  StackPublicSubnet2:
+    Description: Retrieving the subnet id for exporting to other stacks
+    Value: !Ref PublicSubnet0
+    Export:
+       Name: !Sub ${AWS::StackName}-publicsubnet2
+
+  StackPublicSubnet0:
+    Description: Retrieving the subnet id for exporting to other stacks
+    Value: !Ref PublicSubnet1
+    Export:
+       Name: !Sub ${AWS::StackName}-publicsubnet1
+  StackPublicSubnet3:
+    Description: Retrieving the subnet id for exporting to other stacks
+    Value: !Ref PublicSubnet2
+    Export:
+       Name: !Sub ${AWS::StackName}-publicsubnet3
+  StackPublicSubnet4:
+    Description: Retrieving the subnet id for exporting to other stacks
+    Value: !Ref PublicSubnet3
+    Export:
+       Name: !Sub ${AWS::StackName}-publicsubnet4
+
+
+ 
+   
+      
+
+
+      
+  

@@ -1,0 +1,21 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: |
+             Creating a s3 bucket
+  
+Parameters:
+  BucketName:
+    Description: Enter the s3 bucket name
+    Type: String
+    Default: ksprakash
+  
+
+Resources:
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-properties-s3-bucket.html
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties: 
+      BucketName: !Ref BucketName
+      Tags: 
+        - Key: Name
+          Value: s3shared
+  

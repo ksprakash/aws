@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Creates an ec2 instance and installs bare minimum softwares like tomcat8,java 15 to run web application with a volume of 50 GB.
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+
+Resources: 
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription:  SG with port 22, 8080 and 3306 inbound
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:  24.190.31.50/32
+        - IpProtocol: tcp
+          FromPort: '8080'          
+          ToPort: '8080'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '3306'          
+          ToPort: '3306'
+          CidrIp: 10.0.0.0/16
+      VpcId: !ImportValue Networks-vpc
+
+  VMInstance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M       
+    Metadata:
+      Comment: Deploy Tomcat 8 Application and Java 15 
+      AWS::CloudFormation::Authentication: 
+        S3AccessCreds: 
+           type: "S3"
+           accessKeyId: "AKIA3NL7LAKBU7VOI5D6"
+           secretKey: "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"
+           buckets: 
+             - "globalteleclinics"
+      AWS::CloudFormation::Init:
+        configSets:
+          TomcatCS:
+            - App1                
+          TomcatAndJavaCS:
+            - ConfigSet: "TomcatCS"  
+            - App2
+          default:
+            - ConfigSet: "TomcatAndJavaCS"                        
+        App1:
+          packages:
+            yum:
+              java-1.8.0-openjdk.x86_64: []
+              java-1.8.0-openjdk-devel: []
+              git: []
+              tomcat8: []
+              tomcat8-webapps: []
+              tomcat8-admin-webapps: []
+              tomcat8-docs-webapp: []
+              mysql: []
+              mysql-server: []
+              mysql-libs: []
+          
+          
+          files:
+            "/etc/cfn/cfn-hup.conf":
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                interval=3
+              mode: "000400"
+              owner: "root"
+              group: "root"
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.VMInstance.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource VMInstance --region ${AWS::Region}
+              mode: "000400"
+              owner: "root"
+              group: "root"  
+            "/tmp/java.rpm":
+                 source: "https://globalteleclinics.s3.ap-south-1.amazonaws.com/jdk-15.0.1_linux-x64_bin.rpm" 
+                 mode: "000755"
+                 owner: "root"
+                 group: "root"
+                 authentication: "S3AccessCreds"  
+          services:
+            sysvinit:
+              tomcat8: 
+                enabled: "true"
+                ensureRunning: "true"
+              mysqld: 
+                enabled: "true"
+                ensureRunning: "true"                 
+          
+        App2:
+          commands:
+            test1:
+              command: "rpm -Uvh java.rpm"                          
+              cwd: "/tmp"
+            
+    Properties:
+      ImageId: ami-0912f71e06545ad88
+      InstanceType: t2.micro
+      KeyName: !Ref KeyName
+      NetworkInterfaces: 
+         - AssociatePublicIpAddress: true
+           DeviceIndex: "0"
+           GroupSet: 
+              - !Ref SecurityGroup
+           SubnetId: 
+                !ImportValue Networks-publicsubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}
+           
+      
+      UserData:
+        "Fn::Base64": 
+          !Sub |
+            #!/bin/bash -xe
+            # Get latest CloudFormation package - These packages change frequently
+            yum update -y aws-cfn-bootstrap
+            # Start cfn-init to Install all Metadata content (pacakges, sources, files, commands and services )
+            /opt/aws/bin/cfn-init -s ${AWS::StackId} -r VMInstance --region ${AWS::Region} || error_exit 'Failed to run cfn-init'
+            # Signal the status from cfn-init 
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource VMInstance --region ${AWS::Region}
+            # Start cfn-hup daemon so that it will keep listening to any changes to EC2 Instance Metadata. 
+            /opt/aws/bin/cfn-hup || error_exit 'Failed to start cfn-hup'
+    
+  DataVolume:
+     DependsOn: VMInstance
+     Type: AWS::EC2::Volume
+     Properties:
+       Size: 50
+       AvailabilityZone: !GetAtt VMInstance.AvailabilityZone
+       Tags:
+         - Key: Name
+           Value: !Sub  ${AWS::StackName}-DDrive
+  MountPoint:
+    DependsOn: DataVolume
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref VMInstance
+      VolumeId: !Ref DataVolume
+      Device: /dev/sdb
+
+Outputs:
+  TomcatURL:
+    Description: App1 URL to access
+    Value: !Sub 'http://${VMInstance.PublicDnsName}:8080/' 
+  
