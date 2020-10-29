@@ -35,8 +35,8 @@ Resources:
       AWS::CloudFormation::Authentication: 
         S3AccessCreds: 
            type: "S3"
-           accessKeyId: "AKIA3NL7LAKBU7VOI5D6"
-           secretKey: "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"
+           accessKeyId: "AKIA3NL7xxxxxxxxxxxx"
+           secretKey: "uzYcN4dYaauo7Epxxxxxxxxxxxxx"
            buckets: 
              - "globalteleclinics"
       AWS::CloudFormation::Init:
