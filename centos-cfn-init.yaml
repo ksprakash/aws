@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Creates an ec2 instance and installs bare minimum softwares like dotnet to run web application with a volume of 150 GB.
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+  
+  VpcId:
+    Description: Select Vpc in which we lanch this instance
+    Type: AWS::EC2::VPC::Id
+
+  SubnetId:
+    Description: Select Subnet in which we lanch this instance
+    Type: AWS::EC2::Subnet::Id
+    
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - 
+        Label: 
+          default: "Network Configuration"
+        Parameters: 
+          - VpcId
+          - SubnetId
+          
+      - 
+        Label: 
+          default: "Amazon EC2 Configuration"
+        Parameters:
+          - KeyName
+    ParameterLabels: 
+      VpcId: 
+        default: "Which VPC should this be deployed to?"
+      keyname: 
+        default: "Which Key Pair Assigned  to Ec2?"
+  
+
+Resources: 
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription:  SG with port 22, Alltraffic  inbound to Office netwroks only
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp:  157.130.29.54/32
+        - IpProtocol: tcp
+          FromPort: '0'          
+          ToPort: '65535'
+          CidrIp: 157.130.29.54/32
+        - IpProtocol: tcp
+          FromPort: '0'          
+          ToPort: '65535'
+          CidrIp: 172.24.0.0/16
+      VpcId: !Ref  VpcId
+
+  VMInstance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M  
+    Metadata:
+      Comment: Deploy a  Docker and dotnet with file configurations      
+      AWS::CloudFormation::Init:
+        configSets:
+          DockerCS:
+            - App1                
+          DockerAndDotNet:
+            - ConfigSet: "DockerCS"  
+            - App2
+          default:
+            - ConfigSet: "DockerAndDotNet"                        
+        App1:
+          packages:
+            yum:
+              java-1.8.0-openjdk.x86_64: []
+              java-1.8.0-openjdk-devel: []
+              git: []
+              
+          files:
+            "/etc/cfn/cfn-hup.conf":
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                interval=3
+              mode: "000400"
+              owner: "root"
+              group: "root"
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.VMInstance.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource VMInstance --region ${AWS::Region}
+              mode: "000400"
+              owner: "root"
+              group: "root"  
+            "/lib/systemd/system/cfn-hup.service":
+                content: !Sub |
+                  [Unit]
+                  Description=cfn-hup daemon
+                  [Service]
+                  Type=simple
+                  ExecStart=/opt/aws/bin/cfn-hup
+                  Restart=always
+                  [Install]
+                  WantedBy=multi-user.target
+            "/tmp/dotnet-sdk-3.1.404-linux-x64.tar.gz":
+                source: "https://download.visualstudio.microsoft.com/download/pr/ec187f12-929e-4aa7-8abc-2f52e147af1d/56b0dbb5da1c191bff2c271fcd6e6394/dotnet-sdk-3.1.404-linux-x64.tar.gz" 
+                mode: "000755"
+                owner: "root"
+                group: "root"
+          
+          commands:
+            01enable_cfn_hup:
+              command: !Sub |
+                systemctl enable cfn-hup.service
+            02start_cfn_hup:
+              command: !Sub |
+                systemctl start cfn-hup.service  
+           
+          
+        App2:
+          commands:
+            01pre-requisites:
+              command: "yum install -y yum-utils;yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo"                          
+              cwd: "~"
+            02install_docker:
+              command: "yum install docker-ce docker-ce-cli containerd.io -y"                          
+              cwd: "~"
+            03give_permissions:
+              command: "service docker start;usermod -a -G docker centos;chown centos:centos /var/run/docker.sock"                          
+              cwd: "~"
+          services:
+            sysvinit:
+              docker: 
+                enabled: "true"
+                ensureRunning: "true"
+            
+    Properties:
+      ImageId: ami-0affd4508a5d2481b
+      InstanceType: t2.medium
+      KeyName: !Ref KeyName
+      NetworkInterfaces: 
+         - AssociatePublicIpAddress: true
+           DeviceIndex: "0"
+           GroupSet: 
+              - !Ref SecurityGroup
+           SubnetId: 
+                !Ref SubnetId
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}
+           
+      
+      UserData:
+        "Fn::Base64": 
+          !Sub |
+            #!/bin/bash -xe
+            yum update -y
+            # Get latest CloudFormation package - These packages change frequently
+            easy_install --script-dir /opt/aws/bin https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz
+            # Start cfn-init to Install all Metadata content (pacakges, sources, files, commands and services )
+            /opt/aws/bin/cfn-init -s ${AWS::StackId} -r VMInstance --region ${AWS::Region} || error_exit 'Failed to run cfn-init'
+            # Signal the status from cfn-init 
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource VMInstance --region ${AWS::Region}
+            # Start cfn-hup daemon so that it will keep listening to any changes to EC2 Instance Metadata. 
+            /opt/aws/bin/cfn-hup || error_exit 'Failed to start cfn-hup'
+    
+  DataVolume:
+     DependsOn: VMInstance
+     Type: AWS::EC2::Volume
+     Properties:
+       Size: 150
+       AvailabilityZone: !GetAtt VMInstance.AvailabilityZone
+       Tags:
+         - Key: Name
+           Value: !Sub  ${AWS::StackName}-D-Drive
+  MountPoint:
+    DependsOn: DataVolume
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref VMInstance
+      VolumeId: !Ref DataVolume
+      Device: /dev/sdb
+
+Outputs:
+  TomcatURL:
+    Description: App1 URL to access
+    Value: !Sub 'http://${VMInstance.PublicDnsName}:8080/' 
