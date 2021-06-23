@@ -2,7 +2,7 @@ from boto3 import client,resource
 import re
 import json
 import csv
-#tag_client = client('resourcegroupstaggingapi',aws_access_key_id='AKIAYIGLNDQYKR3KRIGE',aws_secret_access_key='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',region_name='us-east-1')
+#tag_client = client('resourcegroupstaggingapi',aws_access_key_id='**************',aws_secret_access_key='*********************',region_name='us-east-1')
 tag_client = client('resourcegroupstaggingapi',aws_access_key_id='*************',aws_secret_access_key='****************',region_name='us-east-1')
 tag_s3_resource =  resource('s3',aws_access_key_id='**************',aws_secret_access_key='******************',region_name='us-east-1')
 class ResourceTags:
