@@ -1,0 +1,10 @@
+import json
+import boto3
+rds=boto3.client('rds')
+response = rds.describe_db_instances()
+def lambda_handler(event, context):
+    vpc ="vpc-00965765"
+    for r in response['DBInstances']:
+            if r['DBSubnetGroup']['VpcId'] == vpc:
+                print(r['DBSubnetGroup']['VpcId'],r['DBInstanceIdentifier'],r['DBInstanceClass'],r['AllocatedStorage'],r['Endpoint'].get('Address'),r['AvailabilityZone'],r['Iops'],r['Engine'],r['MasterUsername'],r['VpcSecurityGroups'],r['DBSubnetGroup']['Subnets'])
+ 
